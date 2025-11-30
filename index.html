@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Team Task Dashboard</title>
+<style>
+body{font-family:sans-serif;margin:0;padding:0;background:#f0f2f5}
+header{background:#4ecdc4;color:white;padding:20px;text-align:center;font-size:1.5em}
+nav{display:flex;justify-content:center;gap:10px;margin:20px}
+nav button{padding:10px 20px;border:none;border-radius:20px;cursor:pointer;background:#ff6b6b;color:white;font-weight:bold}
+nav button.active{background:#4ecdc4}
+.section{padding:20px;max-width:1000px;margin:0 auto;background:white;border-radius:15px;display:none}
+.section.active{display:block}
+.card{background:#f9f9f9;padding:15px;margin:10px 0;border-left:5px solid #4ecdc4;border-radius:10px}
+.badge{display:inline-block;padding:5px 10px;border-radius:15px;font-size:12px;margin:2px;color:white}
+.badge.team{background:#4ecdc4}.badge.member{background:#9c27b0}.badge.deadline{background:#ff9f43}
+input,select,textarea,button{padding:10px;border-radius:10px;border:1px solid #ccc;font-size:14px;width:100%;box-sizing:border-box;margin:5px 0}
+button{cursor:pointer;background:#4ecdc4;color:white;border:none;font-weight:bold}
+button:hover{opacity:0.9}
+.members-input{display:flex;gap:5px;margin-bottom:10px}
+.members-input input{flex:1}
+.empty{text-align:center;color:#888;font-style:italic;padding:20px}
+.task-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:15px}
+h2,h3,h4{margin:0 0 15px 0}
+
+#toast {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  background:#4ecdc4;
+  color:white;
+  padding:12px 18px;
+  border-radius:10px;
+  display:none;
+  font-weight:bold;
+}
+</style>
+</head>
+<body>
+
+<header>🚀 Team Task Dashboard</header>
+
+<nav>
+<button data-section="dashboard" class="active">📊 Dashboard</button>
+<button data-section="teams">👥 Teams</button>
+<button data-section="tasks">📝 Tasks</button>
+</nav>
+
+<div id="toast"></div>
+
+<section id="dashboard" class="section active">
+<h2>Dashboard Overview</h2>
+<div id="dashboard-teams"></div>
+<h3>Tasks by Status</h3>
+<div class="task-grid">
+<div><h4>To Do (<span id="todo-count">0</span>)</h4><div id="tasks-todo"></div></div>
+<div><h4>In Progress (<span id="progress-count">0</span>)</h4><div id="tasks-progress"></div></div>
+<div><h4>Completed (<span id="done-count">0</span>)</h4><div id="tasks-done"></div></div>
+</div>
+</section>
+
+<section id="teams" class="section">
+<h2>👥 Team Management</h2>
+<button type="button" onclick="clearData()" style="background:#ff4444;margin-bottom:20px">🗑️ Clear All Data</button>
+
+<form id="create-team-form">
+<h3>Create New Team</h3>
+<input type="text" id="team-name" placeholder="Enter team name">
+
+<div class="members-input">
+<input type="text" id="member-name" placeholder="Enter member name">
+<button type="button" id="add-member-btn">➕ Add Member</button>
+</div>
+
+<div id="team-members-preview" class="empty">No members added yet</div>
+
+<button type="submit">🚀 Create Team</button>
+</form>
+
+<h3>All Teams</h3>
+<div id="teams-list" class="empty">No teams created yet</div>
+</section>
+
+<section id="tasks" class="section">
+<h2>📝 Task Management</h2>
+
+<form id="create-task-form">
+<h3>Create New Task</h3>
+<select id="task-team" required><option value="">Select Team</option></select>
+<select id="task-assignee" required><option value="">Select Member</option></select>
+<input type="text" id="task-title" placeholder="Task Title" required>
+<textarea id="task-desc" placeholder="Task Description" required></textarea>
+<input type="date" id="task-deadline" required>
+<button type="submit">📋 Create Task</button>
+</form>
+
+<h3>Tasks by Team</h3>
+<div id="tasks-by-team" class="empty">Create a team first</div>
+</section>
+
+<script>
+let teams = JSON.parse(localStorage.getItem('teams') || '[]');
+let tasks = JSON.parse(localStorage.getItem('tasks') || '[]');
+let currentTeamMembers = [];
+
+// TOAST MESSAGE
+function toast(msg) {
+  let t = document.getElementById("toast");
+  t.innerText = msg;
+  t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 1800);
+}
+
+// SAVE
+function saveData() {
+  localStorage.setItem('teams', JSON.stringify(teams));
+  localStorage.setItem('tasks', JSON.stringify(tasks));
+}
+
+// RENDER ALL
+function renderAll() {
+  renderTeams();
+  renderDashboard();
+  renderTaskForm();
+  renderTasksByTeam();
+}
+
+function clearData() {
+  if(confirm("Clear all data?")) {
+    localStorage.clear();
+    teams = [];
+    tasks = [];
+    currentTeamMembers = [];
+    renderAll();
+  }
+}
+
+// TEAM ADD MEMBER
+document.getElementById("add-member-btn").onclick = function () {
+  let name = document.getElementById("member-name").value.trim();
+  if(name && !currentTeamMembers.includes(name)){
+    currentTeamMembers.push(name);
+    document.getElementById("member-name").value = "";
+    updateMembersPreview();
+  }
+};
+
+function updateMembersPreview(){
+  let box = document.getElementById("team-members-preview");
+  if(!currentTeamMembers.length){
+    box.innerHTML = '<div class="empty">No members added yet</div>';
+    return;
+  }
+  box.innerHTML = currentTeamMembers.map(m =>
+    `<span class="badge member">${m} <span onclick="removeMember('${m}')" style="cursor:pointer;color:#ff4444;font-weight:bold">×</span></span>`
+  ).join("");
+}
+
+function removeMember(name) {
+  currentTeamMembers = currentTeamMembers.filter(m => m !== name);
+  updateMembersPreview();
+}
+
+// CREATE TEAM
+document.getElementById("create-team-form").onsubmit = function(e){
+  e.preventDefault();
+  let name = document.getElementById("team-name").value.trim();
+  
+  if(!name) return toast("Enter team name");
+  if(!currentTeamMembers.length) return toast("Add at least 1 member");
+  if(teams.find(t => t.name === name)) return toast("Team already exists");
+
+  teams.push({
+    id: Date.now(),
+    name: name,
+    members: [...currentTeamMembers]
+  });
+
+  document.getElementById("team-name").value = "";
+  currentTeamMembers = [];
+  updateMembersPreview();
+  
+  saveData();
+  renderAll();
+  toast("Team created!");
+};
+
+// TASK FORM RENDER
+function renderTaskForm(){
+  let teamSelect = document.getElementById("task-team");
+  let assigneeSelect = document.getElementById("task-assignee");
+
+  teamSelect.innerHTML = '<option value="">Select Team</option>';
+  teams.forEach(team => {
+    teamSelect.innerHTML += `<option value="${team.id}">${team.name}</option>`;
+  });
+
+  assigneeSelect.innerHTML = '<option value="">Select Member</option>';
+
+  teamSelect.onchange = function(){
+    let team = teams.find(t => t.id == this.value);
+    assigneeSelect.innerHTML = '<option value="">Select Member</option>';
+    if(team){
+      team.members.forEach(m => {
+        assigneeSelect.innerHTML += `<option value="${m}">${m}</option>`;
+      });
+    }
+  };
+}
+
+// CREATE TASK
+document.getElementById("create-task-form").onsubmit = function(e){
+  e.preventDefault();
+  let teamId = parseInt(document.getElementById("task-team").value);
+  let assignee = document.getElementById("task-assignee").value;
+  let title = document.getElementById("task-title").value;
+  let desc = document.getElementById("task-desc").value;
+  let deadline = document.getElementById("task-deadline").value;
+
+  if(!teamId || !assignee || !title || !desc || !deadline)
+    return toast("Fill all fields");
+
+  tasks.push({
+    id: Date.now(),
+    teamId,
+    assignee,
+    title,
+    description: desc,
+    deadline,
+    status: "todo"
+  });
+
+  saveData();
+  this.reset();
+  toast("Task created!");
+  renderAll();
+};
+
+// RENDER TEAMS
+function renderTeams(){
+  let box = document.getElementById("teams-list");
+  if(!teams.length){
+    box.innerHTML = '<div class="empty">No teams created yet</div>';
+    return;
+  }
+  box.innerHTML = teams.map(team => `
+    <div class="card">
+      <h4>${team.name}</h4>
+      <div>${team.members.map(m => `<span class="badge member">${m}</span>`).join("")}</div>
+    </div>
+  `).join("");
+}
+
+// RENDER DASHBOARD
+function renderDashboard(){
+  let teamBox = document.getElementById("dashboard-teams");
+
+  if(!teams.length){
+    teamBox.innerHTML = '<div class="empty">No teams yet</div>';
+  } else {
+    teamBox.innerHTML = teams.map(team => `
+      <div class="card">
+        <strong>${team.name}</strong>
+        <div>${team.members.map(m => `<span class="badge member">${m}</span>`).join("")}</div>
+        <small>${tasks.filter(t => t.teamId === team.id).length} tasks</small>
+      </div>
+    `).join("");
+  }
+
+  let groups = {todo:[],inprogress:[],completed:[]};
+
+  tasks.forEach(t => {
+    groups[t.status].push(t);
+  });
+
+  document.getElementById("todo-count").innerText = groups.todo.length;
+  document.getElementById("progress-count").innerText = groups.inprogress.length;
+  document.getElementById("done-count").innerText = groups.completed.length;
+
+  ["todo","inprogress","completed"].forEach(status=>{
+    let box = document.getElementById("tasks-"+status);
+    if(groups[status].length){
+      box.innerHTML = groups[status].map(task=>`
+        <div class="card">
+          <strong>${task.title}</strong>
+          <p>${task.description}</p>
+          <div>
+            <span class="badge team">${teams.find(t=>t.id===task.teamId)?.name || "Unknown"}</span>
+            <span class="badge member">${task.assignee}</span>
+            <span class="badge deadline">${task.deadline}</span>
+          </div>
+          <select onchange="updateTaskStatus(${task.id}, this.value)">
+            <option value="todo" ${task.status==="todo"?"selected":""}>📌 To Do</option>
+            <option value="inprogress" ${task.status==="inprogress"?"selected":""}>⚡ In Progress</option>
+            <option value="completed" ${task.status==="completed"?"selected":""}>✅ Completed</option>
+          </select>
+        </div>
+      `).join("");
+    } else {
+      box.innerHTML = '<div class="empty">No tasks</div>';
+    }
+  });
+}
+
+// TASKS BY TEAM
+function renderTasksByTeam(){
+  let box = document.getElementById("tasks-by-team");
+
+  if(!teams.length){
+    box.innerHTML = '<div class="empty">Create a team first</div>';
+    return;
+  }
+
+  box.innerHTML = teams.map(team=>{
+    let teamTasks = tasks.filter(t => t.teamId === team.id);
+    return `
+      <div class="card">
+        <h4>${team.name} (${teamTasks.length} tasks)</h4>
+        ${teamTasks.length ? teamTasks.map(task => `
+          <div style="padding:10px;background:#eef;border-radius:8px;margin:10px 0">
+            <strong>${task.title}</strong> → <span class="badge member">${task.assignee}</span>
+            <br><small>${task.description}</small>
+            <br>
+            <select onchange="updateTaskStatus(${task.id}, this.value)">
+              <option value="todo" ${task.status==="todo"?"selected":""}>📌 To Do</option>
+              <option value="inprogress" ${task.status==="inprogress"?"selected":""}>⚡ In Progress</option>
+              <option value="completed" ${task.status==="completed"?"selected":""}>✅ Completed</option>
+            </select>
+          </div>`).join("") : '<div class="empty">No tasks</div>'}
+      </div>
+    `;
+  }).join("");
+}
+
+// UPDATE STATUS
+function updateTaskStatus(id,status){
+  let task = tasks.find(t => t.id === id);
+  if(task){
+    task.status = status;
+    saveData();
+    renderAll();
+  }
+}
+
+// FIXED NAVIGATION (critical fix)
+document.querySelectorAll("nav button").forEach(btn=>{
+  btn.onclick = function(){
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    this.classList.add("active");
+
+    document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+    document.getElementById(this.dataset.section).classList.add("active");
+
+    // FIX: allow DOM switch before rerendering
+    setTimeout(renderAll, 20);
+  };
+});
+
+renderAll();
+</script>
+
+</body>
+</html>
